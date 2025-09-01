@@ -4,19 +4,23 @@ import sqlite3
 import os
 import time
 from datetime import datetime
+
+# --- Importation des fonctions de la base de données ---
+# Assurez-vous d'avoir le fichier database.py dans le même répertoire
 from database import init_db, get_db
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})  # Autoriser toutes les origines pour les tests
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# --- Initialisation ---
+# --- Initialisation de la base de données ---
 init_db()
 
 # --- Filtres Jinja2 pour le template ---
 def timestamp_to_datetime(timestamp):
+    """Convertit un timestamp en millisecondes en une date lisible."""
     try:
         return datetime.fromtimestamp(timestamp / 1000).strftime('%d/%m/%Y')
-    except:
+    except (ValueError, TypeError):
         return '-'
 app.jinja_env.filters['timestamp_to_datetime'] = timestamp_to_datetime
 
@@ -275,18 +279,19 @@ def get_employee_payments():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# 📊 Tableau de bord HTML
+# 📊 Tableau de bord HTML - CORRIGÉ
 @app.route('/dashboard', methods=['GET'])
 def dashboard():
     try:
         conn = get_db()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        # Requête modifiée pour utiliser INNER JOIN afin d'afficher uniquement les paiements existants.
         cursor.execute('''
             SELECT e.nom, e.prenom, e.type, s.employee_name, s.type AS payment_type, 
                    s.amount, s.period, s.date
-            FROM employees e
-            LEFT JOIN salaries s ON e.id = s.employee_id
+            FROM salaries s
+            INNER JOIN employees e ON e.id = s.employee_id
             WHERE e.is_active = 1
             ORDER BY s.date DESC
         ''')
