@@ -6,7 +6,6 @@ import time
 from datetime import datetime
 
 # --- Importation des fonctions de la base de données ---
-# Assurez-vous d'avoir le fichier database.py dans le même répertoire
 from database import init_db, get_db
 
 app = Flask(__name__)
@@ -26,7 +25,6 @@ app.jinja_env.filters['timestamp_to_datetime'] = timestamp_to_datetime
 
 # --- Routes API ---
 
-# 1. 🔐 Login (exemple simple)
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -38,7 +36,6 @@ def login():
         })
     return jsonify({"error": "Identifiants invalides"}), 401
 
-# 2. 👥 Enregistrement employé
 @app.route('/api/employees', methods=['POST'])
 def register_employee():
     emp = request.get_json()
@@ -73,7 +70,6 @@ def register_employee():
     conn.commit()
     return jsonify({"status": "success", "message": "Employé enregistré"}), 201
 
-# 3. 📋 Liste de tous les employés
 @app.route('/api/employees', methods=['GET'])
 def get_all_employees():
     conn = get_db()
@@ -83,7 +79,6 @@ def get_all_employees():
     employees = [dict(row) for row in cursor.fetchall()]
     return jsonify(employees)
 
-# 4. 👷 Employés actifs
 @app.route('/api/employees/active', methods=['GET'])
 def get_active_employees():
     conn = get_db()
@@ -92,7 +87,6 @@ def get_active_employees():
     cursor.execute("SELECT * FROM employees WHERE is_active = 1 ORDER BY nom")
     return jsonify([dict(row) for row in cursor.fetchall()])
 
-# 5. 📍 Position (dernier pointage)
 @app.route('/api/employees/<employeeId>/position', methods=['GET'])
 def get_employee_position(employeeId):
     conn = get_db()
@@ -110,7 +104,6 @@ def get_employee_position(employeeId):
         return jsonify(dict(row))
     return jsonify({"error": "Aucun pointage trouvé"}), 404
 
-# 6. 💰 Enregistrer un salaire
 @app.route('/api/salary', methods=['POST'])
 def save_salary_record():
     record = request.get_json()
@@ -138,7 +131,6 @@ def save_salary_record():
     conn.commit()
     return jsonify({"status": "success", "id": cursor.lastrowid}), 201
 
-# 7. 📅 Historique des salaires
 @app.route('/api/salary/history', methods=['GET'])
 def get_salary_history():
     conn = get_db()
@@ -147,7 +139,6 @@ def get_salary_history():
     cursor.execute("SELECT * FROM salaries ORDER BY date DESC")
     return jsonify([dict(row) for row in cursor.fetchall()])
 
-# 8. 📊 Statistiques par zone (exemple fictif)
 @app.route('/api/statistics/zones/<employeeId>', methods=['GET'])
 def get_zone_statistics(employeeId):
     return jsonify([
@@ -155,7 +146,6 @@ def get_zone_statistics(employeeId):
         {"zone_name": "Zone B", "duration_seconds": 1800}
     ])
 
-# 9. 🚶 Historique des mouvements (pointages)
 @app.route('/api/movements/<employeeId>', methods=['GET'])
 def get_movement_history(employeeId):
     conn = get_db()
@@ -169,7 +159,6 @@ def get_movement_history(employeeId):
     ''', [employeeId])
     return jsonify([dict(row) for row in cursor.fetchall()])
 
-# 10. ⚠️ Alerte zone interdite
 @app.route('/api/alerts/forbidden-zone', methods=['POST'])
 def report_forbidden_zone():
     alert = request.get_json()
@@ -192,7 +181,6 @@ def report_forbidden_zone():
     conn.commit()
     return jsonify({"status": "alerte_enregistrée"}), 201
 
-# 11. 📡 État ESP32
 @app.route('/api/esp32/status', methods=['GET'])
 def get_esp32_status():
     return jsonify({
@@ -202,7 +190,6 @@ def get_esp32_status():
         "uptime_seconds": 3672
     })
 
-# 12. 🔊 Activer le buzzer
 @app.route('/api/esp32/buzzer', methods=['POST'])
 def activate_buzzer():
     data = request.get_json()
@@ -213,9 +200,6 @@ def activate_buzzer():
         "timestamp": int(time.time() * 1000)
     })
 
-# --- Nouvelles routes utiles ---
-
-# 🔄 Synchronisation : Récupérer les données non synchronisées
 @app.route('/api/sync/pointages', methods=['GET'])
 def get_unsynced_pointages():
     conn = get_db()
@@ -224,7 +208,6 @@ def get_unsynced_pointages():
     cursor.execute("SELECT * FROM pointages WHERE is_synced = 0")
     return jsonify([dict(row) for row in cursor.fetchall()])
 
-# 🔄 Envoyer des pointages depuis Android
 @app.route('/api/pointages', methods=['POST'])
 def add_pointage():
     p = request.get_json()
@@ -250,7 +233,6 @@ def add_pointage():
     conn.commit()
     return jsonify({"status": "pointage_enregistré"}), 201
 
-# 📥 Télécharger tous les pointages (pour mise à jour locale)
 @app.route('/api/pointages', methods=['GET'])
 def get_all_pointages():
     conn = get_db()
@@ -259,7 +241,6 @@ def get_all_pointages():
     cursor.execute("SELECT * FROM pointages ORDER BY timestamp DESC")
     return jsonify([dict(row) for row in cursor.fetchall()])
 
-# 💸 Liste des employés avec leurs paiements
 @app.route('/api/employee_payments', methods=['GET'])
 def get_employee_payments():
     try:
@@ -279,14 +260,14 @@ def get_employee_payments():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# 📊 Tableau de bord HTML - CORRIGÉ
+# 📊 Tableau de bord HTML - CORRIGÉ et avec log
 @app.route('/dashboard', methods=['GET'])
 def dashboard():
+    print("Accès à la page du tableau de bord.")  # Log de début
     try:
         conn = get_db()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        # Requête modifiée pour utiliser INNER JOIN afin d'afficher uniquement les paiements existants.
         cursor.execute('''
             SELECT e.nom, e.prenom, e.type, s.employee_name, s.type AS payment_type, 
                    s.amount, s.period, s.date
@@ -296,8 +277,17 @@ def dashboard():
             ORDER BY s.date DESC
         ''')
         payments = [dict(row) for row in cursor.fetchall()]
+        
+        # Logs pour le débogage
+        print(f"Requête SQL exécutée. Nombre de paiements trouvés: {len(payments)}")
+        if payments:
+            print("Premiers paiements trouvés :", payments[:5]) # Affiche les 5 premiers
+        else:
+            print("Aucun paiement trouvé par la requête SQL.")
+
         return render_template('dashboard.html', payments=payments)
     except Exception as e:
+        print(f"Erreur lors de l'accès au tableau de bord: {e}") # Log d'erreur
         return jsonify({'error': str(e)}), 500
 
 # --- Démarrage ---
