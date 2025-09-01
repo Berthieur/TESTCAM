@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, session, redirect, url_for
 from flask_cors import CORS
 import sqlite3
 import os
@@ -7,7 +7,8 @@ from datetime import datetime
 from database import init_db, get_db
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})  # Autoriser toutes les origines pour les tests
+app.secret_key = 'ma_super_cle_secrete'  # À changer pour une valeur sécurisée en production
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # --- Initialisation ---
 init_db()
@@ -20,17 +21,31 @@ def timestamp_to_datetime_full(timestamp):
         return '-'
 app.jinja_env.filters['timestamp_to_datetime_full'] = timestamp_to_datetime_full
 
-# --- Routes API ---
+# --- Routes API et pages ---
 
-# 1. 🔐 Login (exemple simple)
+# Nouvelle route pour la page de connexion HTML
+@app.route('/')
+@app.route('/login')
+def login_page():
+    return render_template('login.html')
+
+# Route pour la déconnexion
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login_page'))
+
+# 1. 🔐 Login API (modifiée pour utiliser les sessions)
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
     if data.get('username') == 'admin' and data.get('password') == '1234':
+        session['logged_in'] = True
         return jsonify({
             "token": "fake-jwt-token-123",
             "role": "admin",
-            "userId": "ADMIN001"
+            "userId": "ADMIN001",
+            "redirect_url": url_for('dashboard')
         })
     return jsonify({"error": "Identifiants invalides"}), 401
 
@@ -209,8 +224,6 @@ def activate_buzzer():
         "timestamp": int(time.time() * 1000)
     })
 
-# --- Nouvelles routes utiles ---
-
 # 🔄 Synchronisation : Récupérer les données non synchronisées
 @app.route('/api/sync/pointages', methods=['GET'])
 def get_unsynced_pointages():
@@ -246,7 +259,7 @@ def add_pointage():
     conn.commit()
     return jsonify({"status": "pointage_enregistré"}), 201
 
-# 📥 Télécharger tous les pointages (pour mise à jour locale)
+# 📥 Télécharger tous les pointages
 @app.route('/api/pointages', methods=['GET'])
 def get_all_pointages():
     conn = get_db()
@@ -275,9 +288,11 @@ def get_employee_payments():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# 📊 Tableau de bord HTML
+# 📊 Tableau de bord HTML (protégé par un login)
 @app.route('/dashboard', methods=['GET'])
 def dashboard():
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
     try:
         conn = get_db()
         conn.row_factory = sqlite3.Row
@@ -286,7 +301,7 @@ def dashboard():
             SELECT 
                 COALESCE(e.nom, SUBSTR(s.employee_name, 1, INSTR(s.employee_name, ' ') - 1)) AS nom,
                 COALESCE(e.prenom, SUBSTR(s.employee_name, INSTR(s.employee_name, ' ') + 1)) AS prenom,
-                COALESCE(e.type, s.type) AS type,  -- Utiliser s.type comme fallback
+                COALESCE(e.type, s.type) AS type,
                 s.employee_name,
                 s.type AS payment_type,
                 s.amount,
@@ -297,9 +312,6 @@ def dashboard():
             ORDER BY s.date DESC
         ''')
         payments = [dict(row) for row in cursor.fetchall()]
-        print(f"Nombre de paiements récupérés : {len(payments)}")  # Débogage
-        for payment in payments:  # Débogage supplémentaire
-            print(f"Payment data: nom={payment['nom']}, prenom={payment['prenom']}, type={payment['type']}, payment_type={payment['payment_type']}, date={payment['date']}, period={payment['period']}")
         return render_template('dashboard.html', payments=payments)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
